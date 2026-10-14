@@ -12,16 +12,16 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
   <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 </head>
-<body>
+<body class="bg-[#d7ccc8] text-stone-900">
   <div id="root"></div>
 
-  <script type="text/babel">
+  <script>
+    const e = React.createElement;
     const { useState, useEffect } = React;
 
     const firebaseConfig = {
@@ -33,7 +33,9 @@
       appId: "1:496803178312:web:4d3af5cccd48aa75ddb57d"
     };
 
-    firebase.initializeApp(firebaseConfig);
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
     const db = firebase.firestore();
 
     const getCategory = (item) => {
@@ -45,7 +47,7 @@
     };
 
     const DAYS = ['Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lördag', 'Söndag'];
-    
+
     function WalteliusMatApp() {
       const [inStoreMode, setInStoreMode] = useState(false);
       const [showAddRecipe, setShowAddRecipe] = useState(false);
@@ -108,7 +110,6 @@
         if (!currentDay[0]) currentDay[0] = recipe;
         else if (!currentDay[1]) currentDay[1] = recipe;
         else { alert("Max 2 rätter per dag!"); return; }
-        
         setWeekMenu({ ...weekMenu, [day]: currentDay });
       };
 
@@ -124,8 +125,8 @@
         }
       };
 
-      const handleAddManualItem = (e) => {
-        e.preventDefault();
+      const handleAddManualItem = (evt) => {
+        evt.preventDefault();
         const trimmed = manualInput.trim();
         if (trimmed) {
           setManualItems([...manualItems, trimmed]);
@@ -142,24 +143,18 @@
           
           if (existingMenu) {
             db.collection("menus").doc(existingMenu.id).update({ menu: weekMenu, manualItems })
-              .then(() => {
-                alert(`Menyn "${trimmedName}" har uppdaterats!`);
-                fetchMenus();
-              })
+              .then(() => { alert(`Menyn "${trimmedName}" har uppdaterats!`); fetchMenus(); })
               .catch(err => alert("Fel vid uppdatering: " + err.message));
           } else {
             db.collection("menus").add({ name: trimmedName, menu: weekMenu, manualItems })
-              .then(() => {
-                alert(`Ny meny "${trimmedName}" är sparad!`);
-                fetchMenus();
-              })
+              .then(() => { alert(`Ny meny "${trimmedName}" är sparad!`); fetchMenus(); })
               .catch(err => alert("Fel vid sparning: " + err.message));
           }
         }
       };
 
-      const handleLoadMenu = (e) => {
-        const menuId = e.target.value;
+      const handleLoadMenu = (evt) => {
+        const menuId = evt.target.value;
         setSelectedMenuId(menuId);
         if (!menuId) {
           setWeekMenu(emptyMenu);
@@ -189,8 +184,8 @@
         }
       };
 
-      const handleCreateOrUpdateRecipe = (e) => {
-        e.preventDefault();
+      const handleCreateOrUpdateRecipe = (evt) => {
+        evt.preventDefault();
         const ingredientsArray = newRecipe.ingredients.split(',').map(i => i.trim()).filter(i => i !== '');
         
         if (editingRecipeId) {
@@ -217,8 +212,8 @@
         setNewRecipe({ name: '', category: 'Färs', color: 'bg-stone-200', ingredients: '' });
       };
 
-      const handleEditRecipe = (recipe, e) => {
-        e.stopPropagation();
+      const handleEditRecipe = (recipe, evt) => {
+        evt.stopPropagation();
         setEditingRecipeId(recipe.id);
         setNewRecipe({
           name: recipe.name,
@@ -229,75 +224,240 @@
         setShowAddRecipe(true);
       };
 
-      const handleDeleteRecipe = (recipeId, e) => {
-        e.stopPropagation();
+      const handleDeleteRecipe = (recipeId, evt) => {
+        evt.stopPropagation();
         if (window.confirm("Vill du radera detta recept ur receptbanken?")) {
           setRecipes(recipes.filter(r => r.id !== recipeId));
         }
       };
 
+      // VVY: I AFFÄREN
       if (inStoreMode) {
-        return (
-          <div className="min-h-screen bg-stone-100 p-2 md:p-8 font-sans">
-            <div className="max-w-md mx-auto bg-white p-4 rounded-xl shadow-lg">
-              <div className="flex justify-between items-center mb-4 border-b pb-2">
-                <h1 className="text-xl font-bold text-stone-800 tracking-widest uppercase">I Affären</h1>
-                <button onClick={() => { setInStoreMode(false); setCheckedItems([]); }} className="text-stone-500 hover:text-red-700 text-sm font-bold">Avsluta & Rensa</button>
-              </div>
-              
-              {Object.keys(groupedShoppingList).map(category => (
-                <div key={category} className="mb-3">
-                  <h3 className="font-bold text-xs text-stone-500 uppercase tracking-wider mb-1 border-b border-stone-200">{category}</h3>
-                  <ul className="space-y-1">
-                    {groupedShoppingList[category].filter(item => !checkedItems.includes(item)).map((item, idx) => (
-                      <li key={idx} className="flex items-center space-x-2 text-sm bg-stone-50 p-1.5 rounded cursor-pointer hover:bg-stone-100 border border-stone-100" onClick={() => toggleItem(item)}>
-                        <div className="w-4 h-4 border border-stone-400 rounded flex-shrink-0 bg-white"></div>
-                        <span className="text-stone-800 leading-tight">{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-
-              {checkedItems.length > 0 && (
-                <div className="mt-6 pt-4 border-t-2 border-stone-200">
-                  <h3 className="font-bold text-xs text-stone-400 uppercase mb-2">Avbockade</h3>
-                  <ul className="space-y-1 opacity-50">
-                    {checkedItems.map((item, idx) => (
-                      <li key={idx} className="flex items-center space-x-2 text-sm cursor-pointer line-through" onClick={() => toggleItem(item)}>
-                        <div className="w-4 h-4 bg-stone-500 rounded flex items-center justify-center text-white text-[10px] flex-shrink-0">✓</div>
-                        <span className="text-stone-600 leading-tight">{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </div>
+        return e('div', { className: 'min-h-screen bg-stone-100 p-2 md:p-8 font-sans' },
+          e('div', { className: 'max-w-md mx-auto bg-white p-4 rounded-xl shadow-lg' },
+            e('div', { className: 'flex justify-between items-center mb-4 border-b pb-2' },
+              e('h1', { className: 'text-xl font-bold text-stone-800 tracking-widest uppercase' }, 'I Affären'),
+              e('button', {
+                onClick: () => { setInStoreMode(false); setCheckedItems([]); },
+                className: 'text-stone-500 hover:text-red-700 text-sm font-bold'
+              }, 'Avsluta & Rensa')
+            ),
+            Object.keys(groupedShoppingList).map(category =>
+              e('div', { key: category, className: 'mb-3' },
+                e('h3', { className: 'font-bold text-xs text-stone-500 uppercase tracking-wider mb-1 border-b border-stone-200' }, category),
+                e('ul', { className: 'space-y-1' },
+                  groupedShoppingList[category].filter(item => !checkedItems.includes(item)).map((item, idx) =>
+                    e('li', {
+                      key: idx,
+                      onClick: () => toggleItem(item),
+                      className: 'flex items-center space-x-2 text-sm bg-stone-50 p-1.5 rounded cursor-pointer hover:bg-stone-100 border border-stone-100'
+                    },
+                      e('div', { className: 'w-4 h-4 border border-stone-400 rounded flex-shrink-0 bg-white' }),
+                      e('span', { className: 'text-stone-800 leading-tight' }, item)
+                    )
+                  )
+                )
+              )
+            ),
+            checkedItems.length > 0 && e('div', { className: 'mt-6 pt-4 border-t-2 border-stone-200' },
+              e('h3', { className: 'font-bold text-xs text-stone-400 uppercase mb-2' }, 'Avbockade'),
+              e('ul', { className: 'space-y-1 opacity-50' },
+                checkedItems.map((item, idx) =>
+                  e('li', {
+                    key: idx,
+                    onClick: () => toggleItem(item),
+                    className: 'flex items-center space-x-2 text-sm cursor-pointer line-through'
+                  },
+                    e('div', { className: 'w-4 h-4 bg-stone-500 rounded flex items-center justify-center text-white text-[10px] flex-shrink-0' }, '✓'),
+                    e('span', { className: 'text-stone-600 leading-tight' }, item)
+                  )
+                )
+              )
+            )
+          )
         );
       }
 
-      return (
-        <div className="min-h-screen bg-[#d7ccc8] p-2 md:p-4 font-sans text-stone-900 pb-20">
+      // STANDARDVY
+      return e('div', { className: 'min-h-screen bg-[#d7ccc8] p-2 md:p-4 font-sans text-stone-900 pb-20' },
+        e('div', { className: 'flex flex-col md:flex-row justify-between items-center mb-6 max-w-7xl mx-auto gap-3' },
+          e('h1', { className: 'text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-stone-800 to-stone-500 tracking-widest uppercase drop-shadow-sm text-center' }, 'Waltelius Mat'),
+          e('button', {
+            onClick: () => setInStoreMode(true),
+            className: 'bg-stone-800 text-white px-5 py-2 rounded font-bold shadow-md hover:bg-stone-900 transition text-sm tracking-wide uppercase'
+          }, 'I affären')
+        ),
+        e('div', { className: 'flex flex-col lg:flex-row gap-3 max-w-7xl mx-auto' },
           
-          <div className="flex flex-col md:flex-row justify-between items-center mb-6 max-w-7xl mx-auto gap-3">
-            <h1 className="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-stone-800 to-stone-500 tracking-widest uppercase drop-shadow-sm text-center">
-              Waltelius Mat
-            </h1>
-            <button 
-              onClick={() => setInStoreMode(true)}
-              className="bg-stone-800 text-white px-5 py-2 rounded font-bold shadow-md hover:bg-stone-900 transition text-sm tracking-wide uppercase"
-            >
-              I affären
-            </button>
-          </div>
+          // VÄNSTER: VECKOMENY & INKÖPSLISTA
+          e('div', { className: 'flex-1 space-y-3' },
+            e('div', { className: 'bg-[#bcaaa4] p-3 rounded-lg shadow-lg border border-[#8d6e63]' },
+              e('div', { className: 'flex justify-between items-center mb-3' },
+                e('h2', { className: 'text-lg font-bold text-stone-900 uppercase tracking-wide' }, 'Veckomeny'),
+                e('div', { className: 'flex items-center gap-2' },
+                  e('select', {
+                    value: selectedMenuId,
+                    onChange: handleLoadMenu,
+                    className: 'bg-stone-100 p-1 md:p-2 rounded border border-stone-400 text-xs font-medium w-28 md:w-auto'
+                  },
+                    e('option', { value: '' }, 'Ladda vecka...'),
+                    savedMenus.map(menu => e('option', { key: menu.id, value: menu.id }, menu.name))
+                  ),
+                  selectedMenuId && e('button', {
+                    onClick: handleDeleteMenu,
+                    className: 'bg-red-800 text-white px-2 py-1 md:py-2 rounded font-bold text-xs uppercase shadow hover:bg-red-900'
+                  }, 'Radera')
+                )
+              ),
+              DAYS.map(day =>
+                e('div', { key: day, className: 'flex mb-1 items-center bg-[#d7ccc8] p-1 rounded border border-stone-400' },
+                  e('span', { className: 'w-10 md:w-16 font-bold text-[11px] md:text-sm uppercase' }, day.substring(0,3)),
+                  e('div', { className: 'flex-1 flex gap-1' },
+                    e('div', { className: 'flex-1 bg-white/60 rounded p-1.5 flex items-center justify-between min-h-[30px] border border-white/40' },
+                      weekMenu[day][0] ? e('span', { className: 'font-semibold text-xs leading-tight' }, weekMenu[day][0].name) : e('span', { className: 'text-stone-500/70 italic text-[10px]' }, 'Tom')
+                    ),
+                    e('div', { className: 'flex-1 bg-white/60 rounded p-1.5 flex items-center justify-between min-h-[30px] border border-white/40' },
+                      weekMenu[day][1] ? e('span', { className: 'font-semibold text-xs leading-tight' }, weekMenu[day][1].name) : e('span', { className: 'text-stone-500/70 italic text-[10px]' }, 'Tom')
+                    )
+                  ),
+                  e('button', {
+                    onClick: () => clearDay(day),
+                    className: 'ml-1 px-2 text-stone-500 hover:text-red-700 font-bold text-lg leading-none'
+                  }, '×')
+                )
+              ),
+              e('div', { className: 'mt-3 flex gap-2' },
+                e('button', {
+                  onClick: handleSaveMenu,
+                  className: 'flex-1 bg-stone-700 text-white py-2 rounded font-bold hover:bg-stone-800 text-xs shadow uppercase tracking-wide'
+                }, 'Spara vecka'),
+                e('button', {
+                  onClick: () => { setWeekMenu(emptyMenu); setSelectedMenuId(""); setManualItems([]); },
+                  className: 'bg-stone-500 text-white px-4 rounded font-bold hover:bg-stone-600 text-xs shadow uppercase tracking-wide'
+                }, 'Töm')
+              )
+            ),
+            e('div', { className: 'bg-[#bcaaa4] p-3 rounded-lg shadow-lg border border-[#8d6e63]' },
+              e('div', { className: 'flex justify-between items-center mb-2' },
+                e('h2', { className: 'text-lg font-bold text-stone-900 uppercase tracking-wide' }, 'Inköpslista'),
+                e('button', {
+                  onClick: () => setShowAddManual(!showAddManual),
+                  className: 'text-[10px] bg-stone-700 text-white px-2 py-1 rounded font-bold uppercase tracking-wider hover:bg-stone-800 shadow transition'
+                }, '+ Lägg till på listan')
+              ),
+              showAddManual && e('form', { onSubmit: handleAddManualItem, className: 'flex gap-2 mb-3 bg-[#d7ccc8] p-2 rounded border border-stone-400' },
+                e('input', {
+                  type: 'text',
+                  placeholder: 'T.ex. Tvättmedel',
+                  className: 'flex-1 p-1.5 rounded border text-xs',
+                  value: manualInput,
+                  onChange: evt => setManualInput(evt.target.value)
+                }),
+                e('button', { type: 'submit', className: 'bg-green-700 text-white px-3 py-1.5 rounded font-bold text-xs uppercase tracking-wide' }, 'Lägg till')
+              ),
+              combinedShoppingList.length > 0 ? e('div', { className: 'space-y-3 mt-2' },
+                Object.keys(groupedShoppingList).map(category =>
+                  e('div', { key: category },
+                    e('h4', { className: 'font-bold border-b border-stone-500/50 mb-1 text-xs uppercase tracking-wider text-stone-800' }, category),
+                    e('ul', { className: 'list-disc pl-4 space-y-0.5 font-medium text-stone-800 text-xs' },
+                      groupedShoppingList[category].map((item, i) => e('li', { key: i }, item))
+                    )
+                  )
+                )
+              ) : e('p', { className: 'text-stone-700 text-xs italic mt-2' }, 'Lägg till rätter eller egna varor för att skapa listan.')
+            )
+          ),
 
-          <div className="flex flex-col lg:flex-row gap-3 max-w-7xl mx-auto">
-            
-            <div className="flex-1 space-y-3">
-              <div className="bg-[#bcaaa4] p-3 rounded-lg shadow-lg border border-[#8d6e63]">
-                <div className="flex justify-between items-center mb-3">
-                  <h2 className="text-lg font-bold text-stone-900 uppercase tracking-wide">Veckomeny</h2>
-                  
-                  <div className="flex items-center gap-2">
-                    <select value={selectedMenuId} onChange={handleLoadMenu} className="bg-stone-100 p
+          // HÖGER: RECEPTBANK
+          e('div', { className: 'flex-1 bg-[#bcaaa4] p-3 rounded-lg shadow-lg border border-[#8d6e63]' },
+            e('h2', { className: 'text-lg font-bold text-stone-900 uppercase tracking-wide mb-3' }, 'Receptbank'),
+            e('div', { className: 'grid grid-cols-3 md:grid-cols-4 gap-2 mb-4' },
+              recipes.map(recipe =>
+                e('div', {
+                  key: recipe.id,
+                  className: `z-10 hover:z-50 ${recipe.color} p-2 rounded shadow-sm cursor-pointer border border-stone-400/50 group relative hover:scale-105 transition duration-200`
+                },
+                  e('div', { className: 'flex justify-between items-start' },
+                    e('div', { className: 'font-bold text-stone-700 opacity-70 text-[8px] mb-0.5 uppercase tracking-wider' }, recipe.category),
+                    e('div', { className: 'flex gap-1 opacity-60 hover:opacity-100' },
+                      e('button', { onClick: (evt) => handleEditRecipe(recipe, evt), className: 'text-[10px] text-stone-700 font-bold hover:text-black' }, '✎'),
+                      e('button', { onClick: (evt) => handleDeleteRecipe(recipe.id, evt), className: 'text-[10px] text-red-700 font-bold hover:text-red-900' }, '×')
+                    )
+                  ),
+                  e('div', { className: 'font-bold text-stone-900 text-xs leading-tight' }, recipe.name),
+                  e('div', { className: 'hidden group-hover:block absolute top-full left-0 mt-1 w-40 bg-white border border-stone-300 rounded shadow-2xl p-1.5' },
+                    e('p', { className: 'text-[10px] text-stone-500 mb-2 italic leading-tight' }, recipe.ingredients.join(', ')),
+                    e('div', { className: 'flex flex-col gap-0.5' },
+                      DAYS.map(day =>
+                        e('button', {
+                          key: day,
+                          onClick: () => addToMenu(recipe, day),
+                          className: 'text-left text-xs bg-stone-100 p-1.5 hover:bg-stone-200 rounded font-medium'
+                        }, `+ Lägg till ${day.substring(0,3)}`)
+                      )
+                    )
+                  )
+                )
+              )
+            ),
+            e('div', { className: 'border-t border-[#8d6e63]/50 pt-4' },
+              !showAddRecipe ? e('button', {
+                onClick: () => { setEditingRecipeId(null); setNewRecipe({ name: '', category: 'Färs', color: 'bg-stone-200', ingredients: '' }); setShowAddRecipe(true); },
+                className: 'w-full bg-stone-700 text-white py-2 rounded font-bold hover:bg-stone-800 transition shadow text-xs uppercase tracking-wide'
+              }, '+ Skapa ny rätt') : e('form', { onSubmit: handleCreateOrUpdateRecipe, className: 'bg-[#d7ccc8] p-3 rounded border border-stone-400 space-y-2 shadow-inner' },
+                e('h3', { className: 'font-bold text-sm uppercase tracking-wide text-stone-800' }, editingRecipeId ? 'Redigera Recept' : 'Skapa Recept'),
+                e('input', {
+                  required: true,
+                  type: 'text',
+                  placeholder: 'Namn (t.ex. Tacos)',
+                  className: 'w-full p-1.5 rounded border text-sm',
+                  value: newRecipe.name,
+                  onChange: evt => setNewRecipe({ ...newRecipe, name: evt.target.value })
+                }),
+                e('div', { className: 'flex gap-2' },
+                  e('select', {
+                    className: 'p-1.5 rounded border flex-1 text-xs',
+                    value: newRecipe.category,
+                    onChange: evt => setNewRecipe({ ...newRecipe, category: evt.target.value })
+                  },
+                    ['Färs', 'Fisk', 'Kyckling', 'Vegetariskt', 'Övrigt'].map(cat => e('option', { key: cat }, cat))
+                  ),
+                  e('select', {
+                    className: 'p-1.5 rounded border flex-1 text-xs',
+                    value: newRecipe.color,
+                    onChange: evt => setNewRecipe({ ...newRecipe, color: evt.target.value })
+                  },
+                    e('option', { value: 'bg-red-200' }, 'Röd'),
+                    e('option', { value: 'bg-blue-200' }, 'Blå'),
+                    e('option', { value: 'bg-yellow-200' }, 'Gul'),
+                    e('option', { value: 'bg-green-200' }, 'Grön'),
+                    e('option', { value: 'bg-stone-200' }, 'Grå')
+                  )
+                ),
+                e('textarea', {
+                  required: true,
+                  placeholder: 'Ingredienser (kommatecken, t.ex: Färs, Majs)',
+                  className: 'w-full p-1.5 rounded border h-16 text-xs',
+                  value: newRecipe.ingredients,
+                  onChange: evt => setNewRecipe({ ...newRecipe, ingredients: evt.target.value })
+                }),
+                e('div', { className: 'flex gap-2' },
+                  e('button', { type: 'submit', className: 'flex-1 bg-stone-800 text-white py-1.5 rounded font-bold text-xs uppercase tracking-wide' }, editingRecipeId ? 'Uppdatera' : 'Spara'),
+                  e('button', {
+                    type: 'button',
+                    onClick: () => { setShowAddRecipe(false); setEditingRecipeId(null); },
+                    className: 'bg-red-800 text-white px-3 rounded font-bold text-xs uppercase tracking-wide'
+                  }, 'Avbryt')
+                )
+              )
+            )
+          )
+        )
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(e(WalteliusMatApp));
+  </script>
+</body>
+</html>
