@@ -48,6 +48,13 @@
 
     const DAYS = ['Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lördag', 'Söndag'];
 
+    const defaultRecipes = [
+      { name: 'Spaghetti Bolognese', category: 'Färs', color: 'bg-red-200', ingredients: ['Köttfärs', 'Krossade tomater', 'Gul lök', 'Spaghetti'] },
+      { name: 'Kycklingcurry', category: 'Kyckling', color: 'bg-yellow-200', ingredients: ['Kycklingfilé', 'Curry', 'Matlagningsgrädde', 'Ris'] },
+      { name: 'Lax i ugn', category: 'Fisk', color: 'bg-blue-200', ingredients: ['Lax', 'Citron', 'Dill', 'Potatis'] },
+      { name: 'Raggmunk', category: 'Vegetariskt', color: 'bg-green-200', ingredients: ['Potatis', 'Vetemjöl', 'Mjölk', 'Lingonsylt'] }
+    ];
+
     function WalteliusMatApp() {
       const [inStoreMode, setInStoreMode] = useState(false);
       const [showAddRecipe, setShowAddRecipe] = useState(false);
@@ -60,42 +67,50 @@
       const [manualItems, setManualItems] = useState([]);
       const [showAddManual, setShowAddManual] = useState(false);
       const [manualInput, setManualInput] = useState("");
+      const [removedRecipeItems, setRemovedRecipeItems] = useState([]);
+      const [isDeleteMode, setIsDeleteMode] = useState(false);
       
       const emptyMenu = {
         Måndag: [null, null], Tisdag: [null, null], Onsdag: [null, null],
         Torsdag: [null, null], Fredag: [null, null], Lördag: [null, null], Söndag: [null, null]
       };
       const [weekMenu, setWeekMenu] = useState(emptyMenu);
-      
-      const [recipes, setRecipes] = useState([
-        { id: 1, name: 'Spaghetti Bolognese', category: 'Färs', color: 'bg-red-200', ingredients: ['Köttfärs', 'Krossade tomater', 'Gul lök', 'Spaghetti'] },
-        { id: 2, name: 'Kycklingcurry', category: 'Kyckling', color: 'bg-yellow-200', ingredients: ['Kycklingfilé', 'Curry', 'Matlagningsgrädde', 'Ris'] },
-        { id: 3, name: 'Lax i ugn', category: 'Fisk', color: 'bg-blue-200', ingredients: ['Lax', 'Citron', 'Dill', 'Potatis'] },
-        { id: 4, name: 'Raggmunk', category: 'Vegetariskt', color: 'bg-green-200', ingredients: ['Potatis', 'Vetemjöl', 'Mjölk', 'Lingonsylt'] }
-      ]);
+      const [recipes, setRecipes] = useState([]);
 
-      const fetchMenus = () => {
-        db.collection("menus").get().then((snapshot) => {
+      // REALTIOS-LYSSNARE: Veckomenyer
+      useEffect(() => {
+        const unsubscribe = db.collection("menus").onSnapshot((snapshot) => {
           const fetched = [];
           snapshot.forEach(doc => fetched.push({ id: doc.id, ...doc.data() }));
           setSavedMenus(fetched);
         });
-      };
+        return () => unsubscribe();
+      }, []);
 
+      // REALTIDS-LYSSNARE: Receptbanken
       useEffect(() => {
-        fetchMenus();
+        const unsubscribe = db.collection("recipes").onSnapshot((snapshot) => {
+          const fetched = [];
+          snapshot.forEach(doc => fetched.push({ id: doc.id, ...doc.data() }));
+          if (fetched.length === 0) {
+            defaultRecipes.forEach(r => db.collection("recipes").add(r));
+          } else {
+            setRecipes(fetched);
+          }
+        });
+        return () => unsubscribe();
       }, []);
 
       const getShoppingList = () => {
         let items = [];
         DAYS.forEach(day => {
-          if (weekMenu[day][0]) items.push(...weekMenu[day][0].ingredients);
-          if (weekMenu[day][1]) items.push(...weekMenu[day][1].ingredients);
+          if (weekMenu[day] && weekMenu[day][0]) items.push(...weekMenu[day][0].ingredients);
+          if (weekMenu[day] && weekMenu[day][1]) items.push(...weekMenu[day][1].ingredients);
         });
         return [...new Set(items)];
       };
 
-      const recipeShoppingList = getShoppingList();
+      const recipeShoppingList = getShoppingList().filter(item => !removedRecipeItems.includes(item));
       const combinedShoppingList = [...new Set([...recipeShoppingList, ...manualItems])];
 
       const groupedShoppingList = combinedShoppingList.reduce((acc, item) => {
@@ -135,6 +150,23 @@
         }
       };
 
+      const handleRemoveItemFromShoppingList = (item) => {
+        if (manualItems.includes(item)) {
+          setManualItems(manualItems.filter(i => i !== item));
+        } else {
+          setRemovedRecipeItems([...removedRecipeItems, item]);
+        }
+      };
+
+      const handleRemoveCheckedItemsInStore = () => {
+        const remainingManual = manualItems.filter(i => !checkedItems.includes(i));
+        const newlyRemovedRecipe = checkedItems.filter(i => !manualItems.includes(i));
+        
+        setManualItems(remainingManual);
+        setRemovedRecipeItems([...removedRecipeItems, ...newlyRemovedRecipe]);
+        setCheckedItems([]);
+      };
+
       const handleSaveMenu = () => {
         const nameInput = prompt("Ge veckomenyn ett namn (t.ex. 'Vecka 42'):");
         if (nameInput) {
@@ -142,12 +174,12 @@
           const existingMenu = savedMenus.find(m => m.name.toLowerCase() === trimmedName.toLowerCase());
           
           if (existingMenu) {
-            db.collection("menus").doc(existingMenu.id).update({ menu: weekMenu, manualItems })
-              .then(() => { alert(`Menyn "${trimmedName}" har uppdaterats!`); fetchMenus(); })
+            db.collection("menus").doc(existingMenu.id).update({ menu: weekMenu, manualItems, removedRecipeItems })
+              .then(() => alert(`Menyn "${trimmedName}" har uppdaterats!`))
               .catch(err => alert("Fel vid uppdatering: " + err.message));
           } else {
-            db.collection("menus").add({ name: trimmedName, menu: weekMenu, manualItems })
-              .then(() => { alert(`Ny meny "${trimmedName}" är sparad!`); fetchMenus(); })
+            db.collection("menus").add({ name: trimmedName, menu: weekMenu, manualItems, removedRecipeItems })
+              .then(() => alert(`Ny meny "${trimmedName}" är sparad!`))
               .catch(err => alert("Fel vid sparning: " + err.message));
           }
         }
@@ -159,12 +191,14 @@
         if (!menuId) {
           setWeekMenu(emptyMenu);
           setManualItems([]);
+          setRemovedRecipeItems([]);
           return;
         }
         const selected = savedMenus.find(m => m.id === menuId);
         if (selected) {
           setWeekMenu(selected.menu);
           setManualItems(selected.manualItems || []);
+          setRemovedRecipeItems(selected.removedRecipeItems || []);
         }
       };
 
@@ -178,7 +212,7 @@
               setSelectedMenuId("");
               setWeekMenu(emptyMenu);
               setManualItems([]);
-              fetchMenus();
+              setRemovedRecipeItems([]);
             })
             .catch(err => alert("Fel vid radering: " + err.message));
         }
@@ -188,23 +222,19 @@
         evt.preventDefault();
         const ingredientsArray = newRecipe.ingredients.split(',').map(i => i.trim()).filter(i => i !== '');
         
+        const recipeData = {
+          name: newRecipe.name,
+          category: newRecipe.category,
+          color: newRecipe.color,
+          ingredients: ingredientsArray
+        };
+
         if (editingRecipeId) {
-          setRecipes(recipes.map(r => r.id === editingRecipeId ? {
-            id: editingRecipeId,
-            name: newRecipe.name,
-            category: newRecipe.category,
-            color: newRecipe.color,
-            ingredients: ingredientsArray
-          } : r));
+          db.collection("recipes").doc(editingRecipeId).update(recipeData)
+            .catch(err => alert("Fel vid uppdatering av recept: " + err.message));
         } else {
-          const finalRecipe = {
-            id: Date.now(),
-            name: newRecipe.name,
-            category: newRecipe.category,
-            color: newRecipe.color,
-            ingredients: ingredientsArray
-          };
-          setRecipes([...recipes, finalRecipe]);
+          db.collection("recipes").add(recipeData)
+            .catch(err => alert("Fel vid skapande av recept: " + err.message));
         }
         
         setShowAddRecipe(false);
@@ -227,20 +257,27 @@
       const handleDeleteRecipe = (recipeId, evt) => {
         evt.stopPropagation();
         if (window.confirm("Vill du radera detta recept ur receptbanken?")) {
-          setRecipes(recipes.filter(r => r.id !== recipeId));
+          db.collection("recipes").doc(recipeId).delete()
+            .catch(err => alert("Fel vid radering av recept: " + err.message));
         }
       };
 
-      // VVY: I AFFÄREN
+      // VY: I AFFÄREN
       if (inStoreMode) {
         return e('div', { className: 'min-h-screen bg-stone-100 p-2 md:p-8 font-sans' },
           e('div', { className: 'max-w-md mx-auto bg-white p-4 rounded-xl shadow-lg' },
             e('div', { className: 'flex justify-between items-center mb-4 border-b pb-2' },
               e('h1', { className: 'text-xl font-bold text-stone-800 tracking-widest uppercase' }, 'I Affären'),
-              e('button', {
-                onClick: () => { setInStoreMode(false); setCheckedItems([]); },
-                className: 'text-stone-500 hover:text-red-700 text-sm font-bold'
-              }, 'Avsluta & Rensa')
+              e('div', { className: 'flex gap-2' },
+                e('button', {
+                  onClick: handleRemoveCheckedItemsInStore,
+                  className: 'bg-amber-800 text-white px-2 py-1 rounded text-xs font-bold uppercase shadow hover:bg-amber-900'
+                }, 'Ta bort avbockade'),
+                e('button', {
+                  onClick: () => { setInStoreMode(false); setCheckedItems([]); },
+                  className: 'bg-stone-800 text-white px-2 py-1 rounded text-xs font-bold uppercase shadow hover:bg-stone-900'
+                }, 'Handlat klart')
+              )
             ),
             Object.keys(groupedShoppingList).map(category =>
               e('div', { key: category, className: 'mb-3' },
@@ -332,7 +369,7 @@
                   className: 'flex-1 bg-stone-700 text-white py-2 rounded font-bold hover:bg-stone-800 text-xs shadow uppercase tracking-wide'
                 }, 'Spara vecka'),
                 e('button', {
-                  onClick: () => { setWeekMenu(emptyMenu); setSelectedMenuId(""); setManualItems([]); },
+                  onClick: () => { setWeekMenu(emptyMenu); setSelectedMenuId(""); setManualItems([]); setRemovedRecipeItems([]); },
                   className: 'bg-stone-500 text-white px-4 rounded font-bold hover:bg-stone-600 text-xs shadow uppercase tracking-wide'
                 }, 'Töm')
               )
@@ -340,10 +377,16 @@
             e('div', { className: 'bg-[#bcaaa4] p-3 rounded-lg shadow-lg border border-[#8d6e63]' },
               e('div', { className: 'flex justify-between items-center mb-2' },
                 e('h2', { className: 'text-lg font-bold text-stone-900 uppercase tracking-wide' }, 'Inköpslista'),
-                e('button', {
-                  onClick: () => setShowAddManual(!showAddManual),
-                  className: 'text-[10px] bg-stone-700 text-white px-2 py-1 rounded font-bold uppercase tracking-wider hover:bg-stone-800 shadow transition'
-                }, '+ Lägg till på listan')
+                e('div', { className: 'flex items-center gap-1.5' },
+                  e('button', {
+                    onClick: () => setIsDeleteMode(!isDeleteMode),
+                    className: `text-xs px-2.5 py-0.5 rounded font-bold transition shadow ${isDeleteMode ? 'bg-red-700 text-white' : 'bg-stone-200 text-stone-800 hover:bg-stone-300'}`
+                  }, '-'),
+                  e('button', {
+                    onClick: () => setShowAddManual(!showAddManual),
+                    className: 'text-[10px] bg-stone-700 text-white px-2 py-1 rounded font-bold uppercase tracking-wider hover:bg-stone-800 shadow transition'
+                  }, '+ Lägg till på listan')
+                )
               ),
               showAddManual && e('form', { onSubmit: handleAddManualItem, className: 'flex gap-2 mb-3 bg-[#d7ccc8] p-2 rounded border border-stone-400' },
                 e('input', {
@@ -360,7 +403,15 @@
                   e('div', { key: category },
                     e('h4', { className: 'font-bold border-b border-stone-500/50 mb-1 text-xs uppercase tracking-wider text-stone-800' }, category),
                     e('ul', { className: 'list-disc pl-4 space-y-0.5 font-medium text-stone-800 text-xs' },
-                      groupedShoppingList[category].map((item, i) => e('li', { key: i }, item))
+                      groupedShoppingList[category].map((item, i) =>
+                        e('li', { key: i, className: 'flex items-center justify-between group' },
+                          e('span', null, item),
+                          isDeleteMode && e('button', {
+                            onClick: () => handleRemoveItemFromShoppingList(item),
+                            className: 'ml-2 text-red-700 font-bold text-xs hover:text-red-900 px-1'
+                          }, '-')
+                        )
+                      )
                     )
                   )
                 )
@@ -371,20 +422,26 @@
           // HÖGER: RECEPTBANK
           e('div', { className: 'flex-1 bg-[#bcaaa4] p-3 rounded-lg shadow-lg border border-[#8d6e63]' },
             e('h2', { className: 'text-lg font-bold text-stone-900 uppercase tracking-wide mb-3' }, 'Receptbank'),
-            e('div', { className: 'grid grid-cols-3 md:grid-cols-4 gap-2 mb-4' },
+            e('div', { className: 'grid grid-cols-3 md:grid-cols-4 gap-1.5 mb-4' },
               recipes.map(recipe =>
                 e('div', {
                   key: recipe.id,
-                  className: `z-10 hover:z-50 ${recipe.color} p-2 rounded shadow-sm cursor-pointer border border-stone-400/50 group relative hover:scale-105 transition duration-200`
+                  className: `z-10 hover:z-50 ${recipe.color} p-1.5 rounded shadow-sm cursor-pointer border border-stone-400/50 group relative hover:scale-105 transition duration-200`
                 },
                   e('div', { className: 'flex justify-between items-start' },
                     e('div', { className: 'font-bold text-stone-700 opacity-70 text-[8px] mb-0.5 uppercase tracking-wider' }, recipe.category),
-                    e('div', { className: 'flex gap-1 opacity-60 hover:opacity-100' },
-                      e('button', { onClick: (evt) => handleEditRecipe(recipe, evt), className: 'text-[10px] text-stone-700 font-bold hover:text-black' }, '✎'),
-                      e('button', { onClick: (evt) => handleDeleteRecipe(recipe.id, evt), className: 'text-[10px] text-red-700 font-bold hover:text-red-900' }, '×')
+                    e('div', { className: 'flex gap-1.5 opacity-70 hover:opacity-100' },
+                      e('button', {
+                        onClick: (evt) => handleEditRecipe(recipe, evt),
+                        className: 'text-xs text-stone-800 font-bold hover:text-black p-0.5'
+                      }, '✎'),
+                      e('button', {
+                        onClick: (evt) => handleDeleteRecipe(recipe.id, evt),
+                        className: 'text-xs text-red-700 font-bold hover:text-red-900 p-0.5'
+                      }, '×')
                     )
                   ),
-                  e('div', { className: 'font-bold text-stone-900 text-xs leading-tight' }, recipe.name),
+                  e('div', { className: 'font-bold text-stone-900 text-[11px] leading-tight' }, recipe.name),
                   e('div', { className: 'hidden group-hover:block absolute top-full left-0 mt-1 w-40 bg-white border border-stone-300 rounded shadow-2xl p-1.5' },
                     e('p', { className: 'text-[10px] text-stone-500 mb-2 italic leading-tight' }, recipe.ingredients.join(', ')),
                     e('div', { className: 'flex flex-col gap-0.5' },
