@@ -9,6 +9,10 @@
   
   <title>Waltelius Mat</title>
   
+  <!-- Mat-favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍳</text></svg>">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍳</text></svg>">
+
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -22,7 +26,7 @@
 
   <script>
     const e = React.createElement;
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
 
     const firebaseConfig = {
       apiKey: "AIzaSyAMwOFjmPaRGhgrikIKw7fp0x2DTEQbvHI",
@@ -55,6 +59,11 @@
       { id: '4', name: 'Raggmunk', category: 'Vegetariskt', color: 'bg-green-200', ingredients: ['Potatis', 'Vetemjöl', 'Mjölk', 'Lingonsylt'] }
     ];
 
+    const emptyMenu = {
+      Måndag: [null, null], Tisdag: [null, null], Onsdag: [null, null],
+      Torsdag: [null, null], Fredag: [null, null], Lördag: [null, null], Söndag: [null, null]
+    };
+
     function WalteliusMatApp() {
       const [inStoreMode, setInStoreMode] = useState(false);
       const [showAddRecipe, setShowAddRecipe] = useState(false);
@@ -70,30 +79,58 @@
       const [removedRecipeItems, setRemovedRecipeItems] = useState([]);
       const [isDeleteMode, setIsDeleteMode] = useState(false);
       
-      const emptyMenu = {
-        Måndag: [null, null], Tisdag: [null, null], Onsdag: [null, null],
-        Torsdag: [null, null], Fredag: [null, null], Lördag: [null, null], Söndag: [null, null]
-      };
       const [weekMenu, setWeekMenu] = useState(emptyMenu);
       const [recipes, setRecipes] = useState(defaultRecipes);
+      
+      const isInitialMount = useRef(true);
 
-      // REALTIODSSYNK MENYER
+      // 1. REALTIDSSYNK: Aktiva veckan (Aktuell arbetsyta i molnet)
+      useEffect(() => {
+        const unsubscribe = db.collection("active_state").doc("current").onSnapshot((doc) => {
+          if (doc.exists) {
+            const data = doc.data();
+            if (data.weekMenu) setWeekMenu(data.weekMenu);
+            if (data.manualItems) setManualItems(data.manualItems);
+            if (data.removedRecipeItems) setRemovedRecipeItems(data.removedRecipeItems);
+            if (data.checkedItems) setCheckedItems(data.checkedItems);
+            if (data.selectedMenuId !== undefined) setSelectedMenuId(data.selectedMenuId);
+          }
+        }, err => console.error("Active state sync error:", err));
+        return () => unsubscribe();
+      }, []);
+
+      // Spara aktivt tillstånd till Firebase vid ändringar
+      const syncActiveState = (updatedData) => {
+        const payload = {
+          weekMenu: updatedData.weekMenu !== undefined ? updatedData.weekMenu : weekMenu,
+          manualItems: updatedData.manualItems !== undefined ? updatedData.manualItems : manualItems,
+          removedRecipeItems: updatedData.removedRecipeItems !== undefined ? updatedData.removedRecipeItems : removedRecipeItems,
+          checkedItems: updatedData.checkedItems !== undefined ? updatedData.checkedItems : checkedItems,
+          selectedMenuId: updatedData.selectedMenuId !== undefined ? updatedData.selectedMenuId : selectedMenuId
+        };
+        db.collection("active_state").doc("current").set(payload, { merge: true })
+          .catch(err => console.error("Error saving active state:", err));
+      };
+
+      // 2. REALTIDSSYNK: Sparade arkiverade veckomenyer
       useEffect(() => {
         const unsubscribe = db.collection("menus").onSnapshot((snapshot) => {
           const fetched = [];
           snapshot.forEach(doc => fetched.push({ id: doc.id, ...doc.data() }));
-          if (fetched.length > 0) setSavedMenus(fetched);
-        }, (err) => console.log("Firebase sync error:", err));
+          setSavedMenus(fetched);
+        }, err => console.error("Menus sync error:", err));
         return () => unsubscribe();
       }, []);
 
-      // REALTIODSSYNK RECEPT
+      // 3. REALTIDSSYNK: Receptbanken
       useEffect(() => {
         const unsubscribe = db.collection("recipes").onSnapshot((snapshot) => {
           const fetched = [];
           snapshot.forEach(doc => fetched.push({ id: doc.id, ...doc.data() }));
-          if (fetched.length > 0) setRecipes(fetched);
-        }, (err) => console.log("Firebase recipes error:", err));
+          if (fetched.length > 0) {
+            setRecipes(fetched);
+          }
+        }, err => console.error("Recipes sync error:", err));
         return () => unsubscribe();
       }, []);
 
@@ -117,50 +154,66 @@
       }, {});
 
       const addToMenu = (recipe, day) => {
-        let currentDay = [...weekMenu[day]];
+        let currentDay = [...(weekMenu[day] || [null, null])];
         if (!currentDay[0]) currentDay[0] = recipe;
         else if (!currentDay[1]) currentDay[1] = recipe;
         else { alert("Max 2 rätter per dag!"); return; }
-        setWeekMenu({ ...weekMenu, [day]: currentDay });
+        
+        const newMenu = { ...weekMenu, [day]: currentDay };
+        setWeekMenu(newMenu);
+        syncActiveState({ weekMenu: newMenu });
       };
 
       const clearDay = (day) => {
-        setWeekMenu({ ...weekMenu, [day]: [null, null] });
+        const newMenu = { ...weekMenu, [day]: [null, null] };
+        setWeekMenu(newMenu);
+        syncActiveState({ weekMenu: newMenu });
       };
 
       const toggleItem = (item) => {
+        let updatedChecked;
         if (checkedItems.includes(item)) {
-          setCheckedItems(checkedItems.filter(i => i !== item));
+          updatedChecked = checkedItems.filter(i => i !== item);
         } else {
-          setCheckedItems([...checkedItems, item]);
+          updatedChecked = [...checkedItems, item];
         }
+        setCheckedItems(updatedChecked);
+        syncActiveState({ checkedItems: updatedChecked });
       };
 
       const handleAddManualItem = (evt) => {
         evt.preventDefault();
         const trimmed = manualInput.trim();
         if (trimmed) {
-          setManualItems([...manualItems, trimmed]);
+          const updatedManual = [...manualItems, trimmed];
+          setManualItems(updatedManual);
           setManualInput("");
           setShowAddManual(false);
+          syncActiveState({ manualItems: updatedManual });
         }
       };
 
       const handleRemoveItemFromShoppingList = (item) => {
         if (manualItems.includes(item)) {
-          setManualItems(manualItems.filter(i => i !== item));
+          const updatedManual = manualItems.filter(i => i !== item);
+          setManualItems(updatedManual);
+          syncActiveState({ manualItems: updatedManual });
         } else {
-          setRemovedRecipeItems([...removedRecipeItems, item]);
+          const updatedRemoved = [...removedRecipeItems, item];
+          setRemovedRecipeItems(updatedRemoved);
+          syncActiveState({ removedRecipeItems: updatedRemoved });
         }
       };
 
       const handleRemoveCheckedItemsInStore = () => {
         const remainingManual = manualItems.filter(i => !checkedItems.includes(i));
         const newlyRemovedRecipe = checkedItems.filter(i => !manualItems.includes(i));
-        
+        const updatedRemoved = [...removedRecipeItems, ...newlyRemovedRecipe];
+
         setManualItems(remainingManual);
-        setRemovedRecipeItems([...removedRecipeItems, ...newlyRemovedRecipe]);
+        setRemovedRecipeItems(updatedRemoved);
         setCheckedItems([]);
+        syncActiveState({ manualItems: remainingManual, removedRecipeItems: updatedRemoved, checkedItems: [] });
       };
 
       const handleSaveMenu = () => {
@@ -188,13 +241,19 @@
           setWeekMenu(emptyMenu);
           setManualItems([]);
           setRemovedRecipeItems([]);
+          syncActiveState({ weekMenu: emptyMenu, manualItems: [], removedRecipeItems: [], selectedMenuId: "" });
           return;
         }
         const selected = savedMenus.find(m => m.id === menuId);
         if (selected) {
-          setWeekMenu(selected.menu);
-          setManualItems(selected.manualItems || []);
-          setRemovedRecipeItems(selected.removedRecipeItems || []);
+          const loadedMenu = selected.menu || emptyMenu;
+          const loadedManual = selected.manualItems || [];
+          const loadedRemoved = selected.removedRecipeItems || [];
+          
+          setWeekMenu(loadedMenu);
+          setManualItems(loadedManual);
+          setRemovedRecipeItems(loadedRemoved);
+          syncActiveState({ weekMenu: loadedMenu, manualItems: loadedManual, removedRecipeItems: loadedRemoved, selectedMenuId: menuId });
         }
       };
 
@@ -209,6 +268,7 @@
               setWeekMenu(emptyMenu);
               setManualItems([]);
               setRemovedRecipeItems([]);
+              syncActiveState({ weekMenu: emptyMenu, manualItems: [], removedRecipeItems: [], selectedMenuId: "" });
             })
             .catch(err => alert("Fel vid radering: " + err.message));
         }
@@ -258,6 +318,15 @@
         }
       };
 
+      const handleClearWeek = () => {
+        setWeekMenu(emptyMenu);
+        setSelectedMenuId("");
+        setManualItems([]);
+        setRemovedRecipeItems([]);
+        setCheckedItems([]);
+        syncActiveState({ weekMenu: emptyMenu, manualItems: [], removedRecipeItems: [], checkedItems: [], selectedMenuId: "" });
+      };
+
       // VY: I AFFÄREN
       if (inStoreMode) {
         return e('div', { className: 'min-h-screen bg-stone-100 p-2 md:p-8 font-sans' },
@@ -270,7 +339,7 @@
                   className: 'bg-amber-800 text-white px-2 py-1 rounded text-xs font-bold uppercase shadow hover:bg-amber-900'
                 }, 'Ta bort avbockade'),
                 e('button', {
-                  onClick: () => { setInStoreMode(false); setCheckedItems([]); },
+                  onClick: () => { setInStoreMode(false); },
                   className: 'bg-stone-800 text-white px-2 py-1 rounded text-xs font-bold uppercase shadow hover:bg-stone-900'
                 }, 'Handlat klart')
               )
@@ -347,10 +416,10 @@
                   e('span', { className: 'w-10 md:w-16 font-bold text-[11px] md:text-sm uppercase' }, day.substring(0,3)),
                   e('div', { className: 'flex-1 flex gap-1' },
                     e('div', { className: 'flex-1 bg-white/60 rounded p-1.5 flex items-center justify-between min-h-[30px] border border-white/40' },
-                      weekMenu[day][0] ? e('span', { className: 'font-semibold text-xs leading-tight' }, weekMenu[day][0].name) : e('span', { className: 'text-stone-500/70 italic text-[10px]' }, 'Tom')
+                      weekMenu[day] && weekMenu[day][0] ? e('span', { className: 'font-semibold text-xs leading-tight' }, weekMenu[day][0].name) : e('span', { className: 'text-stone-500/70 italic text-[10px]' }, 'Tom')
                     ),
                     e('div', { className: 'flex-1 bg-white/60 rounded p-1.5 flex items-center justify-between min-h-[30px] border border-white/40' },
-                      weekMenu[day][1] ? e('span', { className: 'font-semibold text-xs leading-tight' }, weekMenu[day][1].name) : e('span', { className: 'text-stone-500/70 italic text-[10px]' }, 'Tom')
+                      weekMenu[day] && weekMenu[day][1] ? e('span', { className: 'font-semibold text-xs leading-tight' }, weekMenu[day][1].name) : e('span', { className: 'text-stone-500/70 italic text-[10px]' }, 'Tom')
                     )
                   ),
                   e('button', {
@@ -365,7 +434,7 @@
                   className: 'flex-1 bg-stone-700 text-white py-2 rounded font-bold hover:bg-stone-800 text-xs shadow uppercase tracking-wide'
                 }, 'Spara vecka'),
                 e('button', {
-                  onClick: () => { setWeekMenu(emptyMenu); setSelectedMenuId(""); setManualItems([]); setRemovedRecipeItems([]); },
+                  onClick: handleClearWeek,
                   className: 'bg-stone-500 text-white px-4 rounded font-bold hover:bg-stone-600 text-xs shadow uppercase tracking-wide'
                 }, 'Töm')
               )
