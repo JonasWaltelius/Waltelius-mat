@@ -1,1 +1,303 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Waltelius Mat">
+  
+  <title>Waltelius Mat</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAMwOFjmPaRGhgrikIKw7fp0x2DTEQbvHI",
+      authDomain: "waltelius-mat.firebaseapp.com",
+      projectId: "waltelius-mat",
+      storageBucket: "waltelius-mat.firebasestorage.app",
+      messagingSenderId: "496803178312",
+      appId: "1:496803178312:web:4d3af5cccd48aa75ddb57d"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const getCategory = (item) => {
+      const i = item.toLowerCase();
+      if (i.includes('mjölk') || i.includes('grädde') || i.includes('ost') || i.includes('smör') || i.includes('yoghurt')) return 'Mejeri';
+      if (i.includes('kött') || i.includes('färs') || i.includes('kyckling') || i.includes('lax') || i.includes('fisk') || i.includes('korv')) return 'Kött & Fisk';
+      if (i.includes('tomat') || i.includes('lök') || i.includes('potatis') || i.includes('citron') || i.includes('dill') || i.includes('sallad') || i.includes('gurka') || i.includes('morot')) return 'Frukt & Grönt';
+      return 'Skafferi & Övrigt';
+    };
+
+    const DAYS = ['Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lördag', 'Söndag'];
+    
+    function WalteliusMatApp() {
+      const [inStoreMode, setInStoreMode] = useState(false);
+      const [showAddRecipe, setShowAddRecipe] = useState(false);
+      const [editingRecipeId, setEditingRecipeId] = useState(null);
+      const [newRecipe, setNewRecipe] = useState({ name: '', category: 'Färs', color: 'bg-stone-200', ingredients: '' });
+      const [savedMenus, setSavedMenus] = useState([]);
+      const [checkedItems, setCheckedItems] = useState([]);
+      const [selectedMenuId, setSelectedMenuId] = useState("");
+      
+      const [manualItems, setManualItems] = useState([]);
+      const [showAddManual, setShowAddManual] = useState(false);
+      const [manualInput, setManualInput] = useState("");
+      
+      const emptyMenu = {
+        Måndag: [null, null], Tisdag: [null, null], Onsdag: [null, null],
+        Torsdag: [null, null], Fredag: [null, null], Lördag: [null, null], Söndag: [null, null]
+      };
+      const [weekMenu, setWeekMenu] = useState(emptyMenu);
+      
+      const [recipes, setRecipes] = useState([
+        { id: 1, name: 'Spaghetti Bolognese', category: 'Färs', color: 'bg-red-200', ingredients: ['Köttfärs', 'Krossade tomater', 'Gul lök', 'Spaghetti'] },
+        { id: 2, name: 'Kycklingcurry', category: 'Kyckling', color: 'bg-yellow-200', ingredients: ['Kycklingfilé', 'Curry', 'Matlagningsgrädde', 'Ris'] },
+        { id: 3, name: 'Lax i ugn', category: 'Fisk', color: 'bg-blue-200', ingredients: ['Lax', 'Citron', 'Dill', 'Potatis'] },
+        { id: 4, name: 'Raggmunk', category: 'Vegetariskt', color: 'bg-green-200', ingredients: ['Potatis', 'Vetemjöl', 'Mjölk', 'Lingonsylt'] }
+      ]);
+
+      const fetchMenus = () => {
+        db.collection("menus").get().then((snapshot) => {
+          const fetched = [];
+          snapshot.forEach(doc => fetched.push({ id: doc.id, ...doc.data() }));
+          setSavedMenus(fetched);
+        });
+      };
+
+      useEffect(() => {
+        fetchMenus();
+      }, []);
+
+      const getShoppingList = () => {
+        let items = [];
+        DAYS.forEach(day => {
+          if (weekMenu[day][0]) items.push(...weekMenu[day][0].ingredients);
+          if (weekMenu[day][1]) items.push(...weekMenu[day][1].ingredients);
+        });
+        return [...new Set(items)];
+      };
+
+      const recipeShoppingList = getShoppingList();
+      const combinedShoppingList = [...new Set([...recipeShoppingList, ...manualItems])];
+
+      const groupedShoppingList = combinedShoppingList.reduce((acc, item) => {
+        const cat = getCategory(item);
+        if (!acc[cat]) acc[cat] = [];
+        acc[cat].push(item);
+        return acc;
+      }, {});
+
+      const addToMenu = (recipe, day) => {
+        let currentDay = [...weekMenu[day]];
+        if (!currentDay[0]) currentDay[0] = recipe;
+        else if (!currentDay[1]) currentDay[1] = recipe;
+        else { alert("Max 2 rätter per dag!"); return; }
+        
+        setWeekMenu({ ...weekMenu, [day]: currentDay });
+      };
+
+      const clearDay = (day) => {
+        setWeekMenu({ ...weekMenu, [day]: [null, null] });
+      };
+
+      const toggleItem = (item) => {
+        if (checkedItems.includes(item)) {
+          setCheckedItems(checkedItems.filter(i => i !== item));
+        } else {
+          setCheckedItems([...checkedItems, item]);
+        }
+      };
+
+      const handleAddManualItem = (e) => {
+        e.preventDefault();
+        const trimmed = manualInput.trim();
+        if (trimmed) {
+          setManualItems([...manualItems, trimmed]);
+          setManualInput("");
+          setShowAddManual(false);
+        }
+      };
+
+      const handleSaveMenu = () => {
+        const nameInput = prompt("Ge veckomenyn ett namn (t.ex. 'Vecka 42'):");
+        if (nameInput) {
+          const trimmedName = nameInput.trim(); 
+          const existingMenu = savedMenus.find(m => m.name.toLowerCase() === trimmedName.toLowerCase());
+          
+          if (existingMenu) {
+            db.collection("menus").doc(existingMenu.id).update({ menu: weekMenu, manualItems })
+              .then(() => {
+                alert(`Menyn "${trimmedName}" har uppdaterats!`);
+                fetchMenus();
+              })
+              .catch(err => alert("Fel vid uppdatering: " + err.message));
+          } else {
+            db.collection("menus").add({ name: trimmedName, menu: weekMenu, manualItems })
+              .then(() => {
+                alert(`Ny meny "${trimmedName}" är sparad!`);
+                fetchMenus();
+              })
+              .catch(err => alert("Fel vid sparning: " + err.message));
+          }
+        }
+      };
+
+      const handleLoadMenu = (e) => {
+        const menuId = e.target.value;
+        setSelectedMenuId(menuId);
+        if (!menuId) {
+          setWeekMenu(emptyMenu);
+          setManualItems([]);
+          return;
+        }
+        const selected = savedMenus.find(m => m.id === menuId);
+        if (selected) {
+          setWeekMenu(selected.menu);
+          setManualItems(selected.manualItems || []);
+        }
+      };
+
+      const handleDeleteMenu = () => {
+        if (!selectedMenuId) return;
+        const selected = savedMenus.find(m => m.id === selectedMenuId);
+        if (window.confirm(`Är du helt säker på att du vill radera veckomenyn "${selected.name}"?`)) {
+          db.collection("menus").doc(selectedMenuId).delete()
+            .then(() => {
+              alert("Veckomenyn är raderad!");
+              setSelectedMenuId("");
+              setWeekMenu(emptyMenu);
+              setManualItems([]);
+              fetchMenus();
+            })
+            .catch(err => alert("Fel vid radering: " + err.message));
+        }
+      };
+
+      const handleCreateOrUpdateRecipe = (e) => {
+        e.preventDefault();
+        const ingredientsArray = newRecipe.ingredients.split(',').map(i => i.trim()).filter(i => i !== '');
+        
+        if (editingRecipeId) {
+          setRecipes(recipes.map(r => r.id === editingRecipeId ? {
+            id: editingRecipeId,
+            name: newRecipe.name,
+            category: newRecipe.category,
+            color: newRecipe.color,
+            ingredients: ingredientsArray
+          } : r));
+        } else {
+          const finalRecipe = {
+            id: Date.now(),
+            name: newRecipe.name,
+            category: newRecipe.category,
+            color: newRecipe.color,
+            ingredients: ingredientsArray
+          };
+          setRecipes([...recipes, finalRecipe]);
+        }
+        
+        setShowAddRecipe(false);
+        setEditingRecipeId(null);
+        setNewRecipe({ name: '', category: 'Färs', color: 'bg-stone-200', ingredients: '' });
+      };
+
+      const handleEditRecipe = (recipe, e) => {
+        e.stopPropagation();
+        setEditingRecipeId(recipe.id);
+        setNewRecipe({
+          name: recipe.name,
+          category: recipe.category,
+          color: recipe.color,
+          ingredients: recipe.ingredients.join(', ')
+        });
+        setShowAddRecipe(true);
+      };
+
+      const handleDeleteRecipe = (recipeId, e) => {
+        e.stopPropagation();
+        if (window.confirm("Vill du radera detta recept ur receptbanken?")) {
+          setRecipes(recipes.filter(r => r.id !== recipeId));
+        }
+      };
+
+      if (inStoreMode) {
+        return (
+          <div className="min-h-screen bg-stone-100 p-2 md:p-8 font-sans">
+            <div className="max-w-md mx-auto bg-white p-4 rounded-xl shadow-lg">
+              <div className="flex justify-between items-center mb-4 border-b pb-2">
+                <h1 className="text-xl font-bold text-stone-800 tracking-widest uppercase">I Affären</h1>
+                <button onClick={() => { setInStoreMode(false); setCheckedItems([]); }} className="text-stone-500 hover:text-red-700 text-sm font-bold">Avsluta & Rensa</button>
+              </div>
+              
+              {Object.keys(groupedShoppingList).map(category => (
+                <div key={category} className="mb-3">
+                  <h3 className="font-bold text-xs text-stone-500 uppercase tracking-wider mb-1 border-b border-stone-200">{category}</h3>
+                  <ul className="space-y-1">
+                    {groupedShoppingList[category].filter(item => !checkedItems.includes(item)).map((item, idx) => (
+                      <li key={idx} className="flex items-center space-x-2 text-sm bg-stone-50 p-1.5 rounded cursor-pointer hover:bg-stone-100 border border-stone-100" onClick={() => toggleItem(item)}>
+                        <div className="w-4 h-4 border border-stone-400 rounded flex-shrink-0 bg-white"></div>
+                        <span className="text-stone-800 leading-tight">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+
+              {checkedItems.length > 0 && (
+                <div className="mt-6 pt-4 border-t-2 border-stone-200">
+                  <h3 className="font-bold text-xs text-stone-400 uppercase mb-2">Avbockade</h3>
+                  <ul className="space-y-1 opacity-50">
+                    {checkedItems.map((item, idx) => (
+                      <li key={idx} className="flex items-center space-x-2 text-sm cursor-pointer line-through" onClick={() => toggleItem(item)}>
+                        <div className="w-4 h-4 bg-stone-500 rounded flex items-center justify-center text-white text-[10px] flex-shrink-0">✓</div>
+                        <span className="text-stone-600 leading-tight">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen bg-[#d7ccc8] p-2 md:p-4 font-sans text-stone-900 pb-20">
+          
+          <div className="flex flex-col md:flex-row justify-between items-center mb-6 max-w-7xl mx-auto gap-3">
+            <h1 className="text-3xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-stone-800 to-stone-500 tracking-widest uppercase drop-shadow-sm text-center">
+              Waltelius Mat
+            </h1>
+            <button 
+              onClick={() => setInStoreMode(true)}
+              className="bg-stone-800 text-white px-5 py-2 rounded font-bold shadow-md hover:bg-stone-900 transition text-sm tracking-wide uppercase"
+            >
+              I affären
+            </button>
+          </div>
+
+          <div className="flex flex-col lg:flex-row gap-3 max-w-7xl mx-auto">
+            
+            <div className="flex-1 space-y-3">
+              <div className="bg-[#bcaaa4] p-3 rounded-lg shadow-lg border border-[#8d6e63]">
+                <div className="flex justify-between items-center mb-3">
+                  <h2 className="text-lg font-bold text-stone-900 uppercase tracking-wide">Veckomeny</h2>
+                  
+                  <div className="flex items-center gap-2">
+                    <select value={selectedMenuId} onChange={handleLoadMenu} className="bg-stone-100 p
