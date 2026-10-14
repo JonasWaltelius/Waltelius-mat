@@ -49,10 +49,10 @@
     const DAYS = ['Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lördag', 'Söndag'];
 
     const defaultRecipes = [
-      { name: 'Spaghetti Bolognese', category: 'Färs', color: 'bg-red-200', ingredients: ['Köttfärs', 'Krossade tomater', 'Gul lök', 'Spaghetti'] },
-      { name: 'Kycklingcurry', category: 'Kyckling', color: 'bg-yellow-200', ingredients: ['Kycklingfilé', 'Curry', 'Matlagningsgrädde', 'Ris'] },
-      { name: 'Lax i ugn', category: 'Fisk', color: 'bg-blue-200', ingredients: ['Lax', 'Citron', 'Dill', 'Potatis'] },
-      { name: 'Raggmunk', category: 'Vegetariskt', color: 'bg-green-200', ingredients: ['Potatis', 'Vetemjöl', 'Mjölk', 'Lingonsylt'] }
+      { id: '1', name: 'Spaghetti Bolognese', category: 'Färs', color: 'bg-red-200', ingredients: ['Köttfärs', 'Krossade tomater', 'Gul lök', 'Spaghetti'] },
+      { id: '2', name: 'Kycklingcurry', category: 'Kyckling', color: 'bg-yellow-200', ingredients: ['Kycklingfilé', 'Curry', 'Matlagningsgrädde', 'Ris'] },
+      { id: '3', name: 'Lax i ugn', category: 'Fisk', color: 'bg-blue-200', ingredients: ['Lax', 'Citron', 'Dill', 'Potatis'] },
+      { id: '4', name: 'Raggmunk', category: 'Vegetariskt', color: 'bg-green-200', ingredients: ['Potatis', 'Vetemjöl', 'Mjölk', 'Lingonsylt'] }
     ];
 
     function WalteliusMatApp() {
@@ -75,29 +75,25 @@
         Torsdag: [null, null], Fredag: [null, null], Lördag: [null, null], Söndag: [null, null]
       };
       const [weekMenu, setWeekMenu] = useState(emptyMenu);
-      const [recipes, setRecipes] = useState([]);
+      const [recipes, setRecipes] = useState(defaultRecipes);
 
-      // REALTIOS-LYSSNARE: Veckomenyer
+      // REALTIODSSYNK MENYER
       useEffect(() => {
         const unsubscribe = db.collection("menus").onSnapshot((snapshot) => {
           const fetched = [];
           snapshot.forEach(doc => fetched.push({ id: doc.id, ...doc.data() }));
-          setSavedMenus(fetched);
-        });
+          if (fetched.length > 0) setSavedMenus(fetched);
+        }, (err) => console.log("Firebase sync error:", err));
         return () => unsubscribe();
       }, []);
 
-      // REALTIDS-LYSSNARE: Receptbanken
+      // REALTIODSSYNK RECEPT
       useEffect(() => {
         const unsubscribe = db.collection("recipes").onSnapshot((snapshot) => {
           const fetched = [];
           snapshot.forEach(doc => fetched.push({ id: doc.id, ...doc.data() }));
-          if (fetched.length === 0) {
-            defaultRecipes.forEach(r => db.collection("recipes").add(r));
-          } else {
-            setRecipes(fetched);
-          }
-        });
+          if (fetched.length > 0) setRecipes(fetched);
+        }, (err) => console.log("Firebase recipes error:", err));
         return () => unsubscribe();
       }, []);
 
