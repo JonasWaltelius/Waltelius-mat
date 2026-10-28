@@ -9,9 +9,9 @@
   
   <title>Waltelius Mat</title>
   
-  <!-- Mat-favicon -->
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍳</text></svg>">
-  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍳</text></svg>">
+  <!-- Favicon: W format av korvar -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%23bcaaa4%22/><path d=%22M18 20 C18 15 28 15 28 20 L38 72 C39 77 47 77 48 72 L50 42 C51 37 57 37 58 42 L60 72 C61 77 69 77 70 72 L80 20 C80 15 90 15 90 20 L78 80 C74 92 56 92 53 82 L50 65 L47 82 C44 92 26 92 22 80 Z%22 fill=%22%23b91c1c%22 stroke=%22%237f1d1d%22 stroke-width=%223%22 stroke-linejoin=%22round%22/><line x1=%2226%22 y1=%2238%22 x2=%2232%22 y2=%2240%22 stroke=%22%23450a0a%22 stroke-width=%222.5%22 stroke-linecap=%22round%22/><line x1=%2229%22 y1=%2254%22 x2=%2235%22 y2=%2256%22 stroke=%22%23450a0a%22 stroke-width=%222.5%22 stroke-linecap=%22round%22/><line x1=%2274%22 y1=%2238%22 x2=%2268%22 y2=%2240%22 stroke=%22%23450a0a%22 stroke-width=%222.5%22 stroke-linecap=%22round%22/><line x1=%2271%22 y1=%2254%22 x2=%2265%22 y2=%2256%22 stroke=%22%23450a0a%22 stroke-width=%222.5%22 stroke-linecap=%22round%22/></svg>">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%23bcaaa4%22/><path d=%22M18 20 C18 15 28 15 28 20 L38 72 C39 77 47 77 48 72 L50 42 C51 37 57 37 58 42 L60 72 C61 77 69 77 70 72 L80 20 C80 15 90 15 90 20 L78 80 C74 92 56 92 53 82 L50 65 L47 82 C44 92 26 92 22 80 Z%22 fill=%22%23b91c1c%22 stroke=%22%237f1d1d%22 stroke-width=%223%22 stroke-linejoin=%22round%22/><line x1=%2226%22 y1=%2238%22 x2=%2232%22 y2=%2240%22 stroke=%22%23450a0a%22 stroke-width=%222.5%22 stroke-linecap=%22round%22/><line x1=%2229%22 y1=%2254%22 x2=%2235%22 y2=%2256%22 stroke=%22%23450a0a%22 stroke-width=%222.5%22 stroke-linecap=%22round%22/><line x1=%2274%22 y1=%2238%22 x2=%2268%22 y2=%2240%22 stroke=%22%23450a0a%22 stroke-width=%222.5%22 stroke-linecap=%22round%22/><line x1=%2271%22 y1=%2254%22 x2=%2265%22 y2=%2256%22 stroke=%22%23450a0a%22 stroke-width=%222.5%22 stroke-linecap=%22round%22/></svg>">
 
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
@@ -26,7 +26,7 @@
 
   <script>
     const e = React.createElement;
-    const { useState, useEffect, useRef } = React;
+    const { useState, useEffect } = React;
 
     const firebaseConfig = {
       apiKey: "AIzaSyAMwOFjmPaRGhgrikIKw7fp0x2DTEQbvHI",
@@ -51,6 +51,7 @@
     };
 
     const DAYS = ['Måndag', 'Tisdag', 'Onsdag', 'Torsdag', 'Fredag', 'Lördag', 'Söndag'];
+    const RECIPE_CATEGORIES = ['Färs', 'Fisk', 'Kyckling', 'Vegetariskt', 'Övrigt'];
 
     const defaultRecipes = [
       { id: '1', name: 'Spaghetti Bolognese', category: 'Färs', color: 'bg-red-200', ingredients: ['Köttfärs', 'Krossade tomater', 'Gul lök', 'Spaghetti'] },
@@ -81,10 +82,8 @@
       
       const [weekMenu, setWeekMenu] = useState(emptyMenu);
       const [recipes, setRecipes] = useState(defaultRecipes);
-      
-      const isInitialMount = useRef(true);
 
-      // 1. REALTIDSSYNK: Aktiva veckan (Aktuell arbetsyta i molnet)
+      // 1. REALTIDSSYNK: Aktiva veckan
       useEffect(() => {
         const unsubscribe = db.collection("active_state").doc("current").onSnapshot((doc) => {
           if (doc.exists) {
@@ -99,7 +98,6 @@
         return () => unsubscribe();
       }, []);
 
-      // Spara aktivt tillstånd till Firebase vid ändringar
       const syncActiveState = (updatedData) => {
         const payload = {
           weekMenu: updatedData.weekMenu !== undefined ? updatedData.weekMenu : weekMenu,
@@ -112,7 +110,7 @@
           .catch(err => console.error("Error saving active state:", err));
       };
 
-      // 2. REALTIDSSYNK: Sparade arkiverade veckomenyer
+      // 2. REALTIDSSYNK: Sparade veckomenyer
       useEffect(() => {
         const unsubscribe = db.collection("menus").onSnapshot((snapshot) => {
           const fetched = [];
@@ -134,11 +132,16 @@
         return () => unsubscribe();
       }, []);
 
+      // Inköpslista: ENDAST rätter som har ingredienser och inte är manuella genererar varor
       const getShoppingList = () => {
         let items = [];
         DAYS.forEach(day => {
-          if (weekMenu[day] && weekMenu[day][0]) items.push(...weekMenu[day][0].ingredients);
-          if (weekMenu[day] && weekMenu[day][1]) items.push(...weekMenu[day][1].ingredients);
+          [0, 1].forEach(slot => {
+            const item = weekMenu[day] && weekMenu[day][slot];
+            if (item && !item.isManual && item.ingredients) {
+              items.push(...item.ingredients);
+            }
+          });
         });
         return [...new Set(items)];
       };
@@ -162,6 +165,30 @@
         const newMenu = { ...weekMenu, [day]: currentDay };
         setWeekMenu(newMenu);
         syncActiveState({ weekMenu: newMenu });
+      };
+
+      // Manuell textinmatning per plats i veckomenyn (genererar INGA inköpsvaror)
+      const handleManualDishEdit = (day, slotIndex) => {
+        const currentItem = weekMenu[day] && weekMenu[day][slotIndex];
+        const currentText = currentItem ? currentItem.name : "";
+        const input = prompt(`Skriv in rätt för ${day} (genererar inga varor på listan):`, currentText);
+        
+        if (input !== null) {
+          const trimmed = input.trim();
+          let currentDay = [...(weekMenu[day] || [null, null])];
+          if (trimmed === "") {
+            currentDay[slotIndex] = null;
+          } else {
+            currentDay[slotIndex] = {
+              name: trimmed,
+              isManual: true,
+              ingredients: []
+            };
+          }
+          const newMenu = { ...weekMenu, [day]: currentDay };
+          setWeekMenu(newMenu);
+          syncActiveState({ weekMenu: newMenu });
+        }
       };
 
       const clearDay = (day) => {
@@ -305,7 +332,7 @@
           name: recipe.name,
           category: recipe.category,
           color: recipe.color,
-          ingredients: recipe.ingredients.join(', ')
+          ingredients: (recipe.ingredients || []).join(', ')
         });
         setShowAddRecipe(true);
       };
@@ -327,7 +354,7 @@
         syncActiveState({ weekMenu: emptyMenu, manualItems: [], removedRecipeItems: [], checkedItems: [], selectedMenuId: "" });
       };
 
-      // VY: I AFFÄREN
+      // VY: I AFFÄREN (Textstorlek satt till text-xs för en storlek mindre)
       if (inStoreMode) {
         return e('div', { className: 'min-h-screen bg-stone-100 p-2 md:p-8 font-sans' },
           e('div', { className: 'max-w-md mx-auto bg-white p-4 rounded-xl shadow-lg' },
@@ -352,10 +379,10 @@
                     e('li', {
                       key: idx,
                       onClick: () => toggleItem(item),
-                      className: 'flex items-center space-x-2 text-sm bg-stone-50 p-1.5 rounded cursor-pointer hover:bg-stone-100 border border-stone-100'
+                      className: 'flex items-center space-x-2 text-xs bg-stone-50 p-1.5 rounded cursor-pointer hover:bg-stone-100 border border-stone-100'
                     },
-                      e('div', { className: 'w-4 h-4 border border-stone-400 rounded flex-shrink-0 bg-white' }),
-                      e('span', { className: 'text-stone-800 leading-tight' }, item)
+                      e('div', { className: 'w-3.5 h-3.5 border border-stone-400 rounded flex-shrink-0 bg-white' }),
+                      e('span', { className: 'text-stone-800 leading-tight text-xs' }, item)
                     )
                   )
                 )
@@ -368,10 +395,10 @@
                   e('li', {
                     key: idx,
                     onClick: () => toggleItem(item),
-                    className: 'flex items-center space-x-2 text-sm cursor-pointer line-through'
+                    className: 'flex items-center space-x-2 text-xs cursor-pointer line-through'
                   },
-                    e('div', { className: 'w-4 h-4 bg-stone-500 rounded flex items-center justify-center text-white text-[10px] flex-shrink-0' }, '✓'),
-                    e('span', { className: 'text-stone-600 leading-tight' }, item)
+                    e('div', { className: 'w-3.5 h-3.5 bg-stone-500 rounded flex items-center justify-center text-white text-[9px] flex-shrink-0' }, '✓'),
+                    e('span', { className: 'text-stone-600 leading-tight text-xs' }, item)
                   )
                 )
               )
@@ -415,12 +442,20 @@
                 e('div', { key: day, className: 'flex mb-1 items-center bg-[#d7ccc8] p-1 rounded border border-stone-400' },
                   e('span', { className: 'w-10 md:w-16 font-bold text-[11px] md:text-sm uppercase' }, day.substring(0,3)),
                   e('div', { className: 'flex-1 flex gap-1' },
-                    e('div', { className: 'flex-1 bg-white/60 rounded p-1.5 flex items-center justify-between min-h-[30px] border border-white/40' },
-                      weekMenu[day] && weekMenu[day][0] ? e('span', { className: 'font-semibold text-xs leading-tight' }, weekMenu[day][0].name) : e('span', { className: 'text-stone-500/70 italic text-[10px]' }, 'Tom')
-                    ),
-                    e('div', { className: 'flex-1 bg-white/60 rounded p-1.5 flex items-center justify-between min-h-[30px] border border-white/40' },
-                      weekMenu[day] && weekMenu[day][1] ? e('span', { className: 'font-semibold text-xs leading-tight' }, weekMenu[day][1].name) : e('span', { className: 'text-stone-500/70 italic text-[10px]' }, 'Tom')
-                    )
+                    [0, 1].map(slot => {
+                      const item = weekMenu[day] && weekMenu[day][slot];
+                      return e('div', {
+                        key: slot,
+                        onClick: () => handleManualDishEdit(day, slot),
+                        className: 'flex-1 bg-white/60 hover:bg-white/90 cursor-pointer rounded p-1.5 flex items-center justify-between min-h-[30px] border border-white/40 group'
+                      },
+                        item ? e('span', { className: 'font-semibold text-xs leading-tight' },
+                          item.name,
+                          item.isManual ? e('span', { className: 'text-[9px] font-normal text-stone-500 ml-1 italic' }, '(egen)') : null
+                        ) : e('span', { className: 'text-stone-500/70 italic text-[10px]' }, 'Tom'),
+                        e('span', { className: 'opacity-0 group-hover:opacity-60 text-[10px] text-stone-600' }, '✎')
+                      );
+                    })
                   ),
                   e('button', {
                     onClick: () => clearDay(day),
@@ -484,45 +519,54 @@
             )
           ),
 
-          // HÖGER: RECEPTBANK
+          // HÖGER: RECEPTBANK (Sorterad och indelad efter kategorier)
           e('div', { className: 'flex-1 bg-[#bcaaa4] p-3 rounded-lg shadow-lg border border-[#8d6e63]' },
             e('h2', { className: 'text-lg font-bold text-stone-900 uppercase tracking-wide mb-3' }, 'Receptbank'),
-            e('div', { className: 'grid grid-cols-3 md:grid-cols-4 gap-1.5 mb-4' },
-              recipes.map(recipe =>
-                e('div', {
-                  key: recipe.id,
-                  className: `z-10 hover:z-50 ${recipe.color} p-1.5 rounded shadow-sm cursor-pointer border border-stone-400/50 group relative hover:scale-105 transition duration-200`
-                },
-                  e('div', { className: 'flex justify-between items-start' },
-                    e('div', { className: 'font-bold text-stone-700 opacity-70 text-[8px] mb-0.5 uppercase tracking-wider' }, recipe.category),
-                    e('div', { className: 'flex gap-1.5 opacity-70 hover:opacity-100' },
-                      e('button', {
-                        onClick: (evt) => handleEditRecipe(recipe, evt),
-                        className: 'text-xs text-stone-800 font-bold hover:text-black p-0.5'
-                      }, '✎'),
-                      e('button', {
-                        onClick: (evt) => handleDeleteRecipe(recipe.id, evt),
-                        className: 'text-xs text-red-700 font-bold hover:text-red-900 p-0.5'
-                      }, '×')
-                    )
-                  ),
-                  e('div', { className: 'font-bold text-stone-900 text-[11px] leading-tight' }, recipe.name),
-                  e('div', { className: 'hidden group-hover:block absolute top-full left-0 mt-1 w-40 bg-white border border-stone-300 rounded shadow-2xl p-1.5' },
-                    e('p', { className: 'text-[10px] text-stone-500 mb-2 italic leading-tight' }, recipe.ingredients.join(', ')),
-                    e('div', { className: 'flex flex-col gap-0.5' },
-                      DAYS.map(day =>
-                        e('button', {
-                          key: day,
-                          onClick: () => addToMenu(recipe, day),
-                          className: 'text-left text-xs bg-stone-100 p-1.5 hover:bg-stone-200 rounded font-medium'
-                        }, `+ Lägg till ${day.substring(0,3)}`)
+            
+            RECIPE_CATEGORIES.map(categoryName => {
+              const catRecipes = recipes.filter(r => r.category === categoryName);
+              if (catRecipes.length === 0) return null;
+              return e('div', { key: categoryName, className: 'mb-3' },
+                e('h3', { className: 'text-xs font-bold uppercase tracking-wider text-stone-800 mb-1 border-b border-stone-400/60 pb-0.5' }, categoryName),
+                e('div', { className: 'grid grid-cols-3 md:grid-cols-4 gap-1.5' },
+                  catRecipes.map(recipe =>
+                    e('div', {
+                      key: recipe.id,
+                      className: `z-10 hover:z-50 ${recipe.color || 'bg-stone-200'} p-1.5 rounded shadow-sm cursor-pointer border border-stone-400/50 group relative hover:scale-105 transition duration-200`
+                    },
+                      e('div', { className: 'flex justify-between items-start' },
+                        e('div', { className: 'font-bold text-stone-700 opacity-70 text-[8px] mb-0.5 uppercase tracking-wider' }, recipe.category),
+                        e('div', { className: 'flex gap-1.5 opacity-70 hover:opacity-100' },
+                          e('button', {
+                            onClick: (evt) => handleEditRecipe(recipe, evt),
+                            className: 'text-xs text-stone-800 font-bold hover:text-black p-0.5'
+                          }, '✎'),
+                          e('button', {
+                            onClick: (evt) => handleDeleteRecipe(recipe.id, evt),
+                            className: 'text-xs text-red-700 font-bold hover:text-red-900 p-0.5'
+                          }, '×')
+                        )
+                      ),
+                      e('div', { className: 'font-bold text-stone-900 text-[11px] leading-tight' }, recipe.name),
+                      e('div', { className: 'hidden group-hover:block absolute top-full left-0 mt-1 w-40 bg-white border border-stone-300 rounded shadow-2xl p-1.5' },
+                        e('p', { className: 'text-[10px] text-stone-500 mb-2 italic leading-tight' }, (recipe.ingredients || []).join(', ')),
+                        e('div', { className: 'flex flex-col gap-0.5' },
+                          DAYS.map(day =>
+                            e('button', {
+                              key: day,
+                              onClick: () => addToMenu(recipe, day),
+                              className: 'text-left text-xs bg-stone-100 p-1.5 hover:bg-stone-200 rounded font-medium'
+                            }, `+ Lägg till ${day.substring(0,3)}`)
+                          )
+                        )
                       )
                     )
                   )
                 )
-              )
-            ),
-            e('div', { className: 'border-t border-[#8d6e63]/50 pt-4' },
+              );
+            }),
+
+            e('div', { className: 'border-t border-[#8d6e63]/50 pt-3 mt-3' },
               !showAddRecipe ? e('button', {
                 onClick: () => { setEditingRecipeId(null); setNewRecipe({ name: '', category: 'Färs', color: 'bg-stone-200', ingredients: '' }); setShowAddRecipe(true); },
                 className: 'w-full bg-stone-700 text-white py-2 rounded font-bold hover:bg-stone-800 transition shadow text-xs uppercase tracking-wide'
@@ -542,7 +586,7 @@
                     value: newRecipe.category,
                     onChange: evt => setNewRecipe({ ...newRecipe, category: evt.target.value })
                   },
-                    ['Färs', 'Fisk', 'Kyckling', 'Vegetariskt', 'Övrigt'].map(cat => e('option', { key: cat }, cat))
+                    RECIPE_CATEGORIES.map(cat => e('option', { key: cat }, cat))
                   ),
                   e('select', {
                     className: 'p-1.5 rounded border flex-1 text-xs',
